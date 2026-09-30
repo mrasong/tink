@@ -71,3 +71,5 @@ jobs:
               --notes "macOS client builds. Install from the .dmg (drag Tink to Applications) or unzip. Ad-hoc signed; run \`xattr -dr com.apple.quarantine Tink.app\` on first launch."
           fi
           gh release upload "$tag" Tink-*.zip Tink-*.dmg --clobber
+          # publish even when a pre-existing draft was found above
+          gh release edit "$tag" --draft=false
