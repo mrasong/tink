@@ -59,7 +59,7 @@ public final class AppWindowOpener {
 
     private func attemptInvoke(matching: @escaping (String) -> Bool, remaining: Int = 10) {
         func search(_ item: NSMenuItem) -> NSMenuItem? {
-            if matching(item.title), let action = item.action { return item }
+            if matching(item.title), item.action != nil { return item }
             for sub in item.submenu?.items ?? [] {
                 if let hit = search(sub) { return hit }
             }
