@@ -1,480 +1,201 @@
-# Tink 服务端 REST API 文档
+# Tink REST API Reference
 
-> **版本**：v0.2.0  
-> **Base URL**：`http://<server-host>:<port>` (默认 `http://localhost:5021`)
-> **协议规范**：全部接口采用 UTF-8 编码 JSON 格式交互；布尔字段统一使用 `1 (启用/真)` / `0 (禁用/假)`；所有业务时间字段统一使用 13 位 Unix 毫秒时间戳；实时长连接通过 SSE (Server-Sent Events) 传输。
+[English](apidoc.md) | [简体中文](apidoc.zh-CN.md)
 
----
+> **Version**: v0.9.30 · **Base URL**: `http://<host>:<port>` (default `http://localhost:5021`)
 
-## 目录
-
-- [1. 通用协议与格式规范](#1-通用协议与格式规范)
-  - [1.1 鉴权机制 (Bearer Secret Key)](#11-鉴权机制-bearer-secret-key)
-  - [1.2 统一响应结构 (Envelope)](#12-统一响应结构-envelope)
-  - [1.3 全局状态码规范](#13-全局状态码规范)
-  - [1.4 频率限制 (Rate Limiting)](#14-频率限制-rate-limiting)
-- [2. 系统与健康检查接口](#2-系统与健康检查接口)
-  - [2.1 心跳检测 (Ping)](#21-心跳检测-ping)
-- [3. 身份与凭据查询](#3-身份与凭据查询)
-  - [3.1 获取当前 Secret Key 身份信息](#31-获取当前-secret-key-身份信息)
-- [4. 设备管理接口 (Devices)](#4-设备管理接口-devices)
-  - [4.1 注册/更新设备](#41-注册更新设备)
-  - [4.2 获取设备列表](#42-获取设备列表)
-  - [4.3 删除指定设备](#43-删除指定设备)
-- [5. 消息推送接口 (Messages)](#5-消息推送接口-messages)
-  - [5.1 发送消息通知](#51-发送消息通知)
-- [6. 实时通道接口 (SSE)](#6-实时通道接口-sse)
-  - [6.1 订阅实时消息流](#61-订阅实时消息流)
-- [7. 密钥管理接口 (Secret Keys, 仅 Admin 角色可用)](#7-密钥管理接口-secret-keys-仅-admin-角色可用)
-  - [7.1 获取密钥列表](#71-获取密钥列表)
-  - [7.2 创建新密钥](#72-创建新密钥)
-  - [7.3 修改密钥 (重命名/启禁用/角色变更)](#73-修改密钥-重命名启禁用角色变更)
-  - [7.4 删除/吊销密钥](#74-删除吊销密钥)
-- [8. 附录：服务配置与环境变量](#8-附录服务配置与环境变量)
+Conventions: all bodies are UTF-8 JSON; boolean flags on keys/devices are `0 / 1`; timestamps are 13-digit Unix milliseconds; realtime delivery uses SSE (Server-Sent Events). Error `message` strings are localized via `Accept-Language` (any `zh*` tag returns Chinese, otherwise English).
 
 ---
 
-## 1. 通用协议与格式规范
+## 1. Authentication & Limits
 
-### 1.1 鉴权机制 (Bearer Secret Key)
+Three credential channels are checked in this order:
 
-除公开的心跳检测端点 (`/api/v1/ping`) 外，所有 API 均需在 HTTP Header 中携带 Secret Key：
+1. **Unix domain socket (implicit admin)** — requests arriving on `<data>/tink.sock` bypass auth and rate limits and act as an admin key. Used by the `tink-server token/device` CLI when the server is running.
+2. **Bearer Secret Key** — `Authorization: Bearer sk-tink-…`. The raw key is SHA-256 hashed and looked up; disabled keys are rejected.
+3. **Browser session cookie** — `tink_session` (HttpOnly, SameSite=Lax, Secure under TLS) issued by `POST /api/v1/login`; idle TTL 8 h, absolute TTL 24 h. Non-GET requests must additionally send `X-Tink-CSRF: 1`, else `403`.
 
-```http
-Authorization: Bearer <your-secret-key>
+Rate limits:
+
+| Limiter | Budget | Response |
+|---|---|---|
+| Per credential (per-IP when unauthenticated) | 120 req/min | `429 rate limit exceeded` |
+| Auth failures per IP | 20/min | `429 too many failed attempts, retry later` |
+| SSE `GET /api/v1/events` | exempt from the 120/min limiter | — |
+
+## 2. Response Envelope
+
+All REST endpoints except `/api/v1/ping` and SSE handshake errors:
+
+```json
+{ "code": 0, "message": "ok", "data": { } }
 ```
 
-- **Admin 角色** (`role: "admin"`)：系统管理员密钥，拥有全部最高权限（统管所有设备、创建/禁用/删除其它 Secret Key 等）。
-- **User 角色** (`role: "user"`)：业务发信与设备绑定凭据，具备设备绑定和定向推送权限（受权限隔离保护，仅能查看与操作自身关联的设备，无权管理密钥）。
+On error, `code` equals the HTTP status and `data` is `null`. Any `OPTIONS` request returns bare `204`. Security headers (`CSP`, `X-Frame-Options: DENY`, `nosniff`) are set on every response; there are no CORS headers.
 
-### 1.2 统一响应结构 (Envelope)
+## 3. Endpoints
 
-所有接口均统一返回标准化 JSON 信封封装，布尔字段统一使用 `1 / 0`：
+### 3.1 `GET /api/v1/ping` — health check (no auth)
+
+Flat JSON, no envelope:
+
+```json
+{ "message": "pong", "version": "0.9.30", "build": "a524ca3", "st": 1761900000000 }
+```
+
+### 3.2 Session
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/v1/login` | none | Body `{"token":"<secret key>"}` → sets `tink_session` cookie. `data`: `{"id","name","role","is_master","enabled","created_at"}` |
+| POST | `/api/v1/logout` | any | Revokes the current session, clears the cookie. `data`: `{"logout":true}` |
+| GET | `/api/v1/me` | any | Current key identity: `{"id","name","role","is_master","enabled","created_at"}` |
+
+`/api/v1/login` returns `404` when the dashboard is disabled (`TINK_ENABLE_DASHBOARD=false`), except over UDS.
+
+### 3.3 Devices
+
+| Method | Path | Auth |
+|---|---|---|
+| POST | `/api/v1/devices` | any |
+| GET | `/api/v1/devices` | any (admin sees all; user keys see only their own) |
+| DELETE | `/api/v1/devices/{id}` | owner key or admin |
+
+Register/upsert body: `{"id": "<device uuid>", "name": "<label>"}` (both required). The calling key is bound as `key_id`; re-registering preserves the existing binding and timestamps.
+
+Device object:
 
 ```json
 {
-  "code": 0,
-  "message": "ok",
-  "data": { ... }
+  "id": "9F2C…",
+  "key_id": "sk_3WHyWNzJ",
+  "name": "MacBook Pro",
+  "status": 1,
+  "created_at": 1761900000000,
+  "last_connected_at": 1761900000000,
+  "last_disconnected_at": 0
 }
 ```
 
-- `code`：状态业务码（`0` 表示操作成功，非 `0` 表示业务或请求错误，通常对应 HTTP 状态码如 `400`、`401`、`403`、`404`、`429`、`500` 等）。
-- `message`：提示信息（成功通常为 `"ok"`，错误时为具体错误原因）。
-- `data`：成功时携带的业务数据 payload；失败时通常为 `null`。
+`status` is runtime-only (`1` = SSE connected), never persisted. Deleting a device force-closes its SSE connection and returns `{"id","deleted":1}`.
 
-### 1.3 全局状态码规范
+### 3.4 `POST /api/v1/messages` — push (any auth)
 
-| HTTP 状态码                 | 业务 Code | 说明                                                                |
-| :-------------------------- | :-------- | :------------------------------------------------------------------ |
-| `200 OK`                    | `0`       | 请求成功                                                            |
-| `201 Created`               | `0`       | 资源创建成功 (如发信、创建 Key)                                     |
-| `400 Bad Request`           | `400`     | 参数错误、缺少必填字段（如未指定目标设备）或非法操作                |
-| `401 Unauthorized`          | `401`     | 未提供 Secret Key、Key 无效或已被禁用 (`enabled: 0`)                |
-| `403 Forbidden`             | `403`     | 权限不足（如 User 角色试图调用 Key 管理接口，或设备不归属当前 Key） |
-| `404 Not Found`             | `404`     | 路由不存在或资源未找到                                              |
-| `429 Too Many Requests`     | `429`     | 请求超过速率限制                                                    |
-| `500 Internal Server Error` | `500`     | 服务端内部存储或执行错误                                            |
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `title` / `body` | string | one of them | Notification text |
+| `devices` | []string | see note | Target Tink device IDs |
+| `bark_devices` | []string | see note | Target Bark device keys |
+| `bark_params` | object | no | Extra keys merged into the upstream Bark `/push` payload (`level`, `icon`, `badge`, `copy`, `autoCopy`, …); `device_key` cannot be overridden |
+| `url` | string | no | Opened when the notification is clicked |
+| `sound` | string | no | e.g. `default` |
+| `group` | string | no | Carried in the message and indexed (no group-query API yet) |
+| `payload` | object | no | Arbitrary JSON attached to the message |
 
-### 1.4 频率限制 (Rate Limiting)
+Note: at least one of `devices` / `bark_devices` is required — broadcast-without-target is disabled. Every listed Tink device must exist and (for user keys) belong to the caller. Bark forwarding requires **Bark Relay** enabled in settings with a non-empty upstream URL; otherwise each Bark target appends an entry to `bark_errors` (push to Tink still succeeds).
 
-- 默认限流策略：单个 IP 每分钟最多允许 120 次短请求。
-- 超过限流阈值时响应 HTTP `429 Too Many Requests`。
-
----
-
-## 2. 系统与健康检查接口
-
-### 2.1 心跳检测 (Ping)
-
-检测服务端运行状态、获取服务版本及当前服务端 Unix 毫秒时间戳。该接口为公开健康检测端点，无需鉴权，直接返回扁平 JSON 数据（不包装外层 `Envelope`）。
-
-- **请求方式**：`GET /api/v1/ping`
-- **请求头**：无需 `Authorization`
-
-**响应示例**：
+Success returns `201`:
 
 ```json
 {
-  "message": "pong",
-  "version": "0.2.0",
-  "st": 1789141200000
-}
-```
-
----
-
-## 3. 身份与凭据查询
-
-### 3.1 获取当前 Secret Key 身份信息
-
-查询当前发起调用的 Secret Key 详情与权限角色（前端控制台用于区分 Admin 与 User 界面权限）。
-
-- **请求方式**：`GET /api/v1/me`
-- **请求头**：`Authorization: Bearer <Secret-Key>`
-
-**响应示例**：
-
-```json
-{
-  "code": 0,
-  "message": "ok",
+  "code": 0, "message": "ok",
   "data": {
-    "id": "sk_3WHyWNzJ",
-    "name": "GitHub CI Key",
-    "role": "user",
-    "enabled": 1,
-    "created_at": 1789258500000
+    "dispatched_tink": 2,
+    "dispatched_bark": 1,
+    "id": 42,
+    "created_at": 1761900000000,
+    "bark_errors": ["bark relay is disabled or bark_server_url not configured"]
   }
 }
 ```
 
----
+`id` / `created_at` are present only when Tink devices were targeted; `bark_errors` only when some Bark push failed. Message IDs are monotonic `uint64`; messages expire after 7 days.
 
-## 4. 设备管理接口 (Devices)
+### 3.5 `GET /api/v1/events` — SSE stream (any auth)
 
-### 4.1 注册/更新设备
+Device identity via `X-Device-ID` header **or** `?device_id=` query param; the device must belong to the caller's key (admin exempt).
 
-macOS 客户端上线或初次启动时调用，将本机设备信息登记至服务端，并与当前 Secret Key 建立归属关联。
+Offline replay: send `Last-Event-ID` header (or `?last_event_id=`) with the last seen numeric ID; the server replays up to **200** unexpired messages with `id > last_event_id` before switching to live delivery.
 
-- **请求方式**：`POST /api/v1/devices`
-- **请求头**：
-  - `Authorization: Bearer <Secret-Key>`
-  - `Content-Type: application/json`
-
-**请求参数 (Body)**：
-
-| 字段名 | 类型     | 必填 | 描述                              | 示例                |
-| :----- | :------- | :--- | :-------------------------------- | :------------------ |
-| `id`   | `string` | 是   | 客户端持久化设备唯一识别码 (UUID) | `"dev-macbook-pro"` |
-| `name` | `string` | 是   | 设备名称 (供控制台识别)           | `"My MacBook Pro"`  |
-
-**请求体示例**：
-
-```json
-{
-  "id": "dev-macbook-pro",
-  "name": "My MacBook Pro"
-}
-```
-
-**响应示例**：
-
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "id": "dev-macbook-pro",
-    "key_id": "sk_3WHyWNzJ",
-    "name": "My MacBook Pro",
-    "created_at": 1789258530000,
-    "last_connected_at": 1789258530000,
-    "last_disconnected_at": 0
-  }
-}
-```
-
----
-
-### 4.2 获取设备列表
-
-查询已登记的设备列表与在线状态。
-
-- **Admin 角色**：返回系统所有注册的设备；
-- **User 角色**：仅返回绑定在该 Secret Key 下的设备（隔离保护）。
-
-- **请求方式**：`GET /api/v1/devices`
-- **请求头**：`Authorization: Bearer <Secret-Key>`
-
-**响应示例**：
-
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": [
-    {
-      "id": "dev-macbook-pro",
-      "key_id": "sk_3WHyWNzJ",
-      "name": "My MacBook Pro",
-      "status": 1,
-      "created_at": 1789258530000,
-      "last_connected_at": 1789258530000,
-      "last_disconnected_at": 1789258800000
-    }
-  ]
-}
-```
-
----
-
-### 4.3 删除指定设备
-
-注销并删除设备。若该设备当前处于 SSE 在线连接状态，服务端会自动断开连接。
-
-- **权限限制**：Admin 可删除任意设备；User 角色仅能删除归属于自身 Secret Key 的设备。
-
-- **请求方式**：`DELETE /api/v1/devices/{id}`
-- **请求头**：`Authorization: Bearer <Secret-Key>`
-
-**响应示例**：
-
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "id": "dev-macbook-pro",
-    "deleted": 1
-  }
-}
-```
-
----
-
-## 5. 消息推送接口 (Messages)
-
-### 5.1 发送消息通知
-
-向已登记的目标 Mac 设备即时投递通知。系统已支持多设备，**必须显式指定接收的目标设备列表（已彻底禁用无目标广播）**。
-
-- **请求方式**：`POST /api/v1/messages`
-- **请求头**：
-  - `Authorization: Bearer <Secret-Key>`
-  - `Content-Type: application/json`
-
-**请求参数 (Body)**：
-
-| 字段名    | 类型       | 必填     | 描述                                                                      | 示例                                     |
-| :-------- | :--------- | :------- | :------------------------------------------------------------------------ | :--------------------------------------- |
-| `devices` | `string[]` | **是**   | 接收通知的目标设备 ID 列表（不能为空；User 角色只能向属于自己的设备发信） | `["dev-macbook-pro"]`                    |
-| `title`   | `string`   | 条件必填 | 通知标题（title 与 body 至少填一个）                                      | `"构建成功通知"`                         |
-| `body`    | `string`   | 条件必填 | 通知主体内容                                                              | `"CI Pipeline #1024 构建成功，耗时 45s"` |
-| `url`     | `string`   | 否       | 点击通知后自动在浏览器唤起的跳转链接                                      | `"https://ci.example.com/build/1024"`    |
-| `sound`   | `string`   | 否       | 提示音名称（如 `default`、`glass`、`bell`、`silent`）                     | `"default"`                              |
-| `group`   | `string`   | 否       | 通知分组标识（客户端据此归类聚合）                                        | `"deploy"`                               |
-| `payload` | `object`   | 否       | 自定义键值对扩展数据                                                      | `{"env": "production"}`                  |
-
-**请求体示例**：
-
-```json
-{
-  "devices": ["dev-macbook-pro"],
-  "title": "生产环境部署完成",
-  "body": "v1.2.0 已上线并在集群中完成健康检查",
-  "url": "https://dashboard.example.com",
-  "sound": "default",
-  "group": "deploy",
-  "payload": {
-    "build_id": "20260913-01"
-  }
-}
-```
-
-**响应示例**：
-
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "id": 1,
-    "dispatched": 1,
-    "created_at": 1789258800000
-  }
-}
-```
-
----
-
-## 6. 实时通道接口 (SSE)
-
-### 6.1 订阅实时消息流
-
-macOS 客户端或其它订阅端通过 HTTP 长连接接收服务器推送的实时通知事件，支持断网自动补发重放。
-
-- **请求方式**：`GET /api/v1/events`
-- **请求头**：
-  - `Authorization: Bearer <Secret-Key>`
-  - `Accept: text/event-stream`
-  - `X-Device-ID: <device-uuid>`（当前订阅设备的 UUID，用于定向分发与保活）
-  - `Last-Event-ID: <uint64>`（可选：上一次成功接收的消息 ID，重连时服务端自动重放遗漏的历史离线消息）
-
-**服务端返回流格式**：
+Frames:
 
 ```text
+id: 42
+event: notification
+data: {"id":42,"key_id":"sk_…","devices":["…"],"title":"…","body":"…","url":"…","sound":"…","group":"…","payload":{…},"created_at":…,"expires_at":…}
+
 event: ping
 data: {}
-
-id: 1
-data: {"id":1,"key_id":"sk_3WHyWNzJ","devices":["dev-macbook-pro"],"group":"deploy","title":"生产环境部署完成","body":"v1.2.0 已上线","url":"https://dashboard.example.com","sound":"default","created_at":1789258800000}
 ```
 
-- 心跳保活：服务端每隔 30 秒发送一次 `event: ping`，防止中间代理超时断开。
+A `ping` heartbeat is sent every 30 s; a failed heartbeat closes the connection — reconnect with the same device ID (a new connection replaces the stale one). Handshake errors are **raw JSON, not the envelope**: `400 {"error":"X-Device-ID header or device_id query required"}`, `401 {"error":"device not registered"}`, `403 {"error":"unauthorized device"}`.
 
----
+### 3.6 Keys (admin only)
 
-## 7. 密钥管理接口 (Secret Keys, 仅 Admin 角色可用)
+`/api/v1/tokens` is an alias for `/api/v1/keys`. All four routes return `404` when the dashboard is disabled (UDS unaffected).
 
-> **权限说明**：本组所有接口均被 `RequireAdminRole` 拦截，仅允许持有 **Admin 角色** 的 Secret Key 发起请求。普通 User 角色访问均返回 `403 Forbidden`。
+| Method | Path | Body / Result |
+|---|---|---|
+| GET | `/api/v1/keys` | Array of `{"id","name","role","is_master","enabled","created_at","last_used"}` |
+| POST | `/api/v1/keys` | `{"name":"ci-key","role":"user"}` (both optional; role ≠ `admin` → `user`) → `201` with `{"token","secret_key",…}` — the raw key is returned **once** |
+| PUT | `/api/v1/keys/{id}` | Any of `{"name","enabled":0|1,"role"}`; an admin key cannot be disabled |
+| DELETE | `/api/v1/keys/{id}` | Guards: cannot delete the key making the request, cannot delete admin keys |
 
-### 7.1 获取密钥列表
+Key format: `sk-tink-` + 64 random alphanumeric chars; ID = `sk_` + last 8 chars.
 
-获取系统所有创建的 Secret Key 清单。
+### 3.7 Settings (admin only)
 
-- **请求方式**：`GET /api/v1/keys` (兼容别名 `GET /api/v1/tokens`)
-- **请求头**：`Authorization: Bearer <Admin-Secret-Key>`
+`GET /api/v1/settings` → `{"bark_relay_enabled": false, "bark_server_url": "https://api.day.app", "bark_route_path": "/bark-relay"}`
 
-**响应示例**：
+`PUT /api/v1/settings` accepts the same keys (all optional, partial merge; real JSON booleans here). Values are normalized: `bark_server_url` trims trailing `/` (empty → `https://api.day.app`); `bark_route_path` gets a leading `/` (empty or `/` → `/bark-relay`).
 
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": [
-    {
-      "id": "admin",
-      "name": "Admin Secret Key",
-      "role": "admin",
-      "enabled": 1,
-      "created_at": 1789257600000,
-      "last_used": 1789258800000
-    },
-    {
-      "id": "sk_3WHyWNzJ",
-      "name": "GitHub Actions CI",
-      "role": "user",
-      "enabled": 1,
-      "created_at": 1789258200000,
-      "last_used": 1789258680000
-    }
-  ]
-}
-```
+### 3.8 Bark relay proxy
 
----
+When `bark_relay_enabled`, every request to `{bark_route_path}/…` (e.g. `/bark-relay/push`, `/bark-relay/register`) is transparently reverse-proxied to `{bark_server_url}/…` with the prefix stripped — no auth required. Point the iOS Bark App at `http://<host>:5021/bark-relay` for full native proxying (registration, `device_key` issuing, pushes). Disabled → `404`; invalid upstream → `502`.
 
-### 7.2 创建新密钥
+### 3.9 Web dashboard
 
-生成新的 Secret Key，生成的明文密钥在响应中**仅返回一次**，服务端只持久化单向 SHA-256 Hash。
+The embedded SPA is served at `/dashboard` by default. `--dashboard-route` / `TINK_DASHBOARD_ROUTE` moves it (e.g. `/my-panel`); once customized, `/` returns `404` to avoid leaking the path. `TINK_ENABLE_DASHBOARD=false` removes all web surfaces and the login/keys API over TCP.
 
-- **请求方式**：`POST /api/v1/keys` (兼容别名 `POST /api/v1/tokens`)
-- **请求头**：
-  - `Authorization: Bearer <Admin-Secret-Key>`
-  - `Content-Type: application/json`
+## 4. Error Message Catalogue
 
-**请求参数 (Body)**：
+Messages are localized; English is the API contract. `%s` / `%v` are filled with details.
 
-| 字段名 | 类型     | 必填 | 描述                                            | 示例                 |
-| :----- | :------- | :--- | :---------------------------------------------- | :------------------- |
-| `name` | `string` | 否   | 密钥用途说明备注（默认 `"default"`）            | `"GitHub CI Runner"` |
-| `role` | `string` | 否   | 密钥角色：`"user"` 或 `"admin"` (默认 `"user"`) | `"user"`             |
+| HTTP | English | 中文 |
+|---|---|---|
+| 400 | `invalid json` | JSON 格式错误 |
+| 400 | `id and name are required` | id 和 name 为必填项 |
+| 400 | `missing device id` / `missing key id` | 缺少设备 ID / 缺少密钥 ID |
+| 400 | `title or body is required` | title 与 body 至少填写一项 |
+| 400 | `at least one target is required: specify 'devices' for Tink clients or 'bark_devices' for Bark clients` | 请至少指定一个目标… |
+| 400 | `admin key cannot be disabled` / `admin key cannot be deleted` | 不能禁用/删除管理员密钥 |
+| 400 | `cannot delete currently active secret key` | 不能删除当前正在使用的密钥 |
+| 401 | `missing authorization header` | 缺少认证信息 (Authorization 头) |
+| 401 | `invalid or expired secret key` | Secret Key 无效或已过期 |
+| 403 | `csrf check failed` | CSRF 校验失败，请刷新页面后重试 |
+| 403 | `forbidden: admin role required` | 禁止访问：需要管理员权限 |
+| 403 | `forbidden: cannot delete device registered with another secret key` | 禁止访问：该设备注册于其他 Secret Key… |
+| 403 | `device %s does not belong to your secret key` | 设备 %s 不属于当前 Secret Key |
+| 404 | `endpoint not found` / `device not found` / `secret key not found` | 接口不存在 / 设备不存在 / Secret Key 不存在 |
+| 405 | `method not allowed` | 请求方法不被允许 |
+| 429 | `rate limit exceeded` / `too many failed attempts, retry later` | 请求过于频繁… / 失败次数过多… |
+| 500 | `failed to generate message id` / `persist error: %s` / `generate secret key failed` | 生成消息 ID 失败 / 写入存储失败：%s / 生成 Secret Key 失败 |
+| 502 | `invalid upstream bark server url` / `bark relay proxy error: %v` | Bark 上游服务地址无效 / Bark 转发失败：%v |
 
-**请求体示例**：
+## 5. Environment & CLI
 
-```json
-{
-  "name": "GitHub CI Runner",
-  "role": "user"
-}
-```
+| Variable | Flag | Default | Purpose |
+|---|---|---|---|
+| `TINK_PORT` | `serve -p, --port` | `5021` | Listen port |
+| `TINK_DATA_DIR` | `-d, --data` | `./data` | Data directory (`tink.db`, `tink.sock`) |
+| `TINK_INITIAL_TOKEN` | `serve --token` | random | Initial admin key; applied **only** when the DB has zero keys |
+| `TINK_ENABLE_DASHBOARD` | `serve --enable-dashboard` | `true` | `false`/`0` disables web surfaces + login/keys API |
+| `TINK_DASHBOARD_ROUTE` | `serve --dashboard-route` | `/dashboard` | Custom console path |
 
-**响应示例**：
+CLI (`tink-server`): `serve`, `key` (alias `token`) `list|create -n -r|enable|disable|delete`, `device list|delete`, `version`. Management subcommands talk to the running server over UDS automatically, falling back to direct (offline) bbolt access when the server is stopped.
 
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "secret_key": "sk-tink-d2b3c4e5f6a7b8c9d0e1f2a3b4c5d6e7",
-    "id": "sk_b4c5d6e7",
-    "name": "GitHub CI Runner",
-    "role": "user",
-    "enabled": 1,
-    "created_at": 1789259100000
-  }
-}
-```
+## 6. Related Docs
 
----
-
-### 7.3 修改密钥 (重命名/启禁用/角色变更)
-
-更新密钥名称、启/禁用状态（`1 / 0`）或角色。已被禁用的密钥（`enabled: 0`）无法通过鉴权。
-
-- **请求方式**：`PUT /api/v1/keys/{id}` (兼容别名 `PUT /api/v1/tokens/{id}`)
-- **请求头**：
-  - `Authorization: Bearer <Admin-Secret-Key>`
-  - `Content-Type: application/json`
-
-**请求参数 (Body)**：
-
-| 字段名    | 类型     | 必填 | 描述                                                    | 示例                    |
-| :-------- | :------- | :--- | :------------------------------------------------------ | :---------------------- |
-| `name`    | `string` | 否   | 新密钥名称                                              | `"Production Deployer"` |
-| `enabled` | `uint8`  | 否   | 是否启用：`1` 为启用，`0` 为禁用 (Admin 密钥禁止被禁用) | `0`                     |
-| `role`    | `string` | 否   | 变更角色 (`"user"` 或 `"admin"`)                        | `"user"`                |
-
-**请求体示例**：
-
-```json
-{
-  "name": "Production Deployer",
-  "enabled": 0
-}
-```
-
-**响应示例**：
-
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "id": "sk_b4c5d6e7",
-    "name": "Production Deployer",
-    "role": "user",
-    "enabled": 0,
-    "last_used": 1789259100000
-  }
-}
-```
-
----
-
-### 7.4 删除/吊销密钥
-
-永久注销并删除指定的 Secret Key。
-
-- **安全保护机制**：
-  - **Admin 保护**：禁止删除 Admin 密钥；
-  - **防自删保护**：禁止删除当前发起调用的密钥自身。
-
-- **请求方式**：`DELETE /api/v1/keys/{id}` (兼容别名 `DELETE /api/v1/tokens/{id}`)
-- **请求头**：`Authorization: Bearer <Admin-Secret-Key>`
-
-**响应示例**：
-
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "id": "sk_b4c5d6e7",
-    "deleted": 1
-  }
-}
-```
-
----
-
-## 8. 附录：服务配置与环境变量
-
-| 环境变量                | CLI 参数             | 默认值       | 说明                                                                    |
-| :---------------------- | :------------------- | :----------- | :---------------------------------------------------------------------- |
-| `TINK_PORT`             | `-p, --port`         | `5021`       | 服务端监听 HTTP 端口                                                    |
-| `TINK_DATA_DIR`         | `-d, --data`         | `./data`     | bbolt 嵌入式数据库存储目录                                              |
-| `TINK_INITIAL_TOKEN`    | `--token`            | 自动生成     | 服务首次启动时的初始 Admin Secret Key                                   |
-| `TINK_ENABLE_DASHBOARD` | `--enable-dashboard` | `true`       | 是否启用内置 Web 控制台及 Key 管理接口                                  |
-| `TINK_DASHBOARD_ROUTE`  | `--dashboard-route`  | `/dashboard` | 自定义 Web 控制台访问路径（配置自定义后根路径 `/` 自动返回 404 防探测） |
+- Database schema: [database_schema.md](database_schema.md) / [中文](database_schema.zh-CN.md)
+- Project overview: [README.md](../README.md) / [中文](../README.zh-CN.md)

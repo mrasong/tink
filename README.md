@@ -42,7 +42,7 @@ tink/
 │   │   ├── store/          # bbolt message store, indexes, offline replay, auto pruning
 │   │   └── web/            # go:embed layer for the compiled dashboard assets
 │   ├── web/                # Svelte web dashboard (Vite + TypeScript)
-│   └── go.mod              # Go module (github.com/mrasong/tinker/server)
+│   └── go.mod              # Go module (github.com/mrasong/tink/server)
 ├── client/                 # macOS client (Swift Package Manager, Swift 6.2)
 │   ├── Package.swift
 │   └── Sources/Tink/
@@ -61,7 +61,7 @@ tink/
 ├── docker-compose.yml      # Docker Compose deployment
 ├── justfile                # `just` task runner commands
 ├── Taskfile.yml            # `task` runner commands
-└── docs/                   # API reference, database schema, release plans
+└── docs/                   # API reference, database schema (EN / zh-CN)
 ```
 
 ---
@@ -108,11 +108,11 @@ Pass arguments to override defaults for one-off builds, e.g. `./scripts/build_se
 # Option B: manually
 cd server && go build -o ../build/tink-server ./cmd/server && cd ..
 
-# Run (default port 5021; the Master Token is printed to the console on first boot)
+# Run (default port 5021; the initial Admin Secret Key is printed to the console on first boot)
 ./build/tink-server serve --port 5021 --data ./data
 ```
 
-Then open `http://localhost:5021/dashboard` (or simply `http://localhost:5021`) in a browser, enter the Master Token, and you are in the web console — manage devices and secret keys, or fire test pushes.
+Then open `http://localhost:5021/dashboard` (or simply `http://localhost:5021`) in a browser, log in with the Admin Secret Key, and you are in the web console — manage devices and secret keys, or fire test pushes.
 
 > **Custom dashboard route**: set the `TINK_DASHBOARD_ROUTE` environment variable or the `--dashboard-route` flag (e.g. `/my-panel`) to move the console to a private path. Once set, both `/` and `/dashboard` return 404, so the path cannot be probed.
 
@@ -133,6 +133,8 @@ docker pull ghcr.io/mrasong/tink:latest   # or a version tag, e.g. v0.9.30
 ---
 
 ## 🖥️ macOS Client
+
+Prebuilt drag-to-install DMGs (arm64 / x86_64) and universal zips are attached to each [GitHub Release](releases).
 
 Requires macOS 15+ and Swift 6.2+ to build from source.
 
@@ -180,10 +182,10 @@ curl -X POST http://localhost:5021/api/v1/messages \
 curl http://localhost:5021/api/v1/ping
 ```
 
-Full interface documentation: [docs/apidoc.md](docs/apidoc.md) · Database schema: [docs/database_schema.md](docs/database_schema.md)
+Full interface documentation: [docs/apidoc.md](docs/apidoc.md) ([中文](docs/apidoc.zh-CN.md)) · Database schema: [docs/database_schema.md](docs/database_schema.md) ([中文](docs/database_schema.zh-CN.md))
 
 ---
 
 ## 📄 License
 
-MIT
+[MIT](LICENSE)

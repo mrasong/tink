@@ -42,7 +42,7 @@ tink/
 │   │   ├── store/          # bbolt 消息存储与索引、离线重放、自动清理
 │   │   └── web/            # go:embed 嵌入层（编译打包静态产物）
 │   ├── web/                # Svelte Web 管理控制台工程（Vite + TypeScript）
-│   └── go.mod              # 后端独立 Go 模块 (github.com/mrasong/tinker/server)
+│   └── go.mod              # 后端独立 Go 模块 (github.com/mrasong/tink/server)
 ├── client/                 # macOS 客户端工程 (Swift Package Manager, Swift 6.2)
 │   ├── Package.swift
 │   └── Sources/Tink/
@@ -61,7 +61,7 @@ tink/
 ├── docker-compose.yml      # Docker Compose 部署配置
 ├── justfile                # Just 命令运行配置
 ├── Taskfile.yml            # Task 命令运行配置
-└── docs/                   # 接口文档、数据库设计与实施文档
+└── docs/                   # 接口文档、数据库结构（中英双语）
 ```
 
 ---
@@ -110,11 +110,11 @@ App 的第三个参数可覆盖显示用的 Git Commit，例如 `./scripts/build
 # 方式 B：手动编译
 cd server && go build -o ../build/tink-server ./cmd/server && cd ..
 
-# 启动服务端（默认端口 5021，首次启动控制台会输出 Master Token）
+# 启动服务端（默认端口 5021，首次启动控制台会输出初始管理员 Secret Key）
 ./build/tink-server serve --port 5021 --data ./data
 ```
 
-启动后可直接在浏览器打开 `http://localhost:5021/dashboard`（或直接访问 `http://localhost:5021`），输入 Master Token 即可进入 Svelte 管理控制台，可视化管理设备、Secret Key 并发起推送测试。
+启动后可直接在浏览器打开 `http://localhost:5021/dashboard`（或直接访问 `http://localhost:5021`），输入初始管理员 Secret Key 即可登录 Svelte 管理控制台，可视化管理设备、Secret Key 并发起推送测试。
 
 > **自定义 Dashboard 访问路径**：
 > 服务端支持通过环境变量 `TINK_DASHBOARD_ROUTE` 或启动参数 `--dashboard-route` 自定义控制台 URL（例如 `/my-panel` 或 `/admin`），避免使用默认路径提升安全性。一旦配置了自定义路由，根路径 `/` 与原 `/dashboard` 均直接返回 404，彻底杜绝路径泄露。
@@ -136,6 +136,8 @@ docker pull ghcr.io/mrasong/tink:latest   # 或版本号 tag，如 v0.9.30
 ---
 
 ## 🖥️ macOS 客户端编译与运行
+
+各版本 [GitHub Release](releases) 均附带拖拽安装式 DMG（arm64 / x86_64）与 universal zip 预构建包，可直接下载。
 
 编译需 macOS 15+ 系统与 Swift 6.2+ 工具链。
 
@@ -183,10 +185,10 @@ curl -X POST http://localhost:5021/api/v1/messages \
 curl http://localhost:5021/api/v1/ping
 ```
 
-完整接口文档见 [docs/apidoc.md](docs/apidoc.md)，数据库设计见 [docs/database_schema.md](docs/database_schema.md)。
+完整接口文档见 [docs/apidoc.zh-CN.md](docs/apidoc.zh-CN.md)（[English](docs/apidoc.md)），数据库设计见 [docs/database_schema.zh-CN.md](docs/database_schema.zh-CN.md)（[English](docs/database_schema.md)）。
 
 ---
 
 ## 📄 License
 
-MIT
+[MIT](LICENSE)
