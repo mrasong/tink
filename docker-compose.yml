@@ -1,0 +1,18 @@
+services:
+  tink:
+    image: tink:latest
+    container_name: tink
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - TINK_DATA_DIR=/data
+      - TINK_PORT=5021
+      # 不设置则首次启动随机生成 Admin Secret Key 并打印到日志一次
+      - TINK_INITIAL_TOKEN=sk-tink-change_me_to_a_secure_token
+      - TINK_DASHBOARD_ROUTE=/dashboard
+    ports:
+      - "5021:5021"
+    volumes:
+      - ./data:/data

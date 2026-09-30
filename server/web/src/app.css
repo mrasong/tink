@@ -1,0 +1,43 @@
+:root {
+  --bg-color: #f8fafc;
+  --card-bg: #ffffff;
+  --text-color: #0f172a;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
+  --hover-bg: #f1f5f9;
+  --input-bg: #ffffff;
+  --btn-bg: #f8fafc;
+  --badge-bg: #f1f5f9;
+
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-light: rgba(79, 70, 229, 0.1);
+}
+
+:root.dark {
+  --bg-color: #0b0f19;
+  --card-bg: #111827;
+  --text-color: #f8fafc;
+  --text-muted: #94a3b8;
+  --border-color: #1f293d;
+  --hover-bg: #1a2234;
+  --input-bg: #0b0f19;
+  --btn-bg: #161f30;
+  --badge-bg: #1e293b;
+
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --primary-light: rgba(99, 102, 241, 0.15);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  -webkit-font-smoothing: antialiased;
+}

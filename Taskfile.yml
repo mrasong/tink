@@ -1,0 +1,120 @@
+version: "3"
+
+tasks:
+  default:
+    desc: "列出所有可用任务"
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: "构建所有组件 (Server 与 Client)"
+    deps:
+      - build-server
+      - build-client
+
+  build-server:
+    desc: "构建 Go 后端服务到 build/tink-server"
+    cmds:
+      - ./scripts/build_server.sh
+
+  build-docker:
+    desc: "构建 x86_64 Docker 镜像"
+    cmds:
+      - ./scripts/build_docker.sh "" '{{.IMAGE | default "tink:latest"}}'
+
+  build-docker-multi:
+    desc: "构建并推送 ARM64 + x86_64 多架构镜像"
+    vars:
+      IMAGE: '{{.IMAGE | default "用户名/tink:latest"}}'
+    cmds:
+      - ./scripts/build_docker.sh "" '{{.IMAGE}}' linux/amd64,linux/arm64
+      - docker buildx build --platform linux/amd64,linux/arm64 --push --build-arg VERSION="$(tr -d '[:space:]' < VERSION)" --build-arg BUILD_ID="$(git rev-parse --short=7 HEAD)" -t {{.IMAGE}} .
+
+  build-docker-amd64:
+    desc: "构建 x86_64 Docker 镜像"
+    cmds:
+      - ./scripts/build_docker.sh "" tink:amd64 linux/amd64
+
+  build-client:
+    desc: "构建并打包 macOS 客户端到 build/Tink.app"
+    cmds:
+      - ./scripts/build_app.sh
+
+  test:
+    desc: "运行后端测试"
+    dir: server
+    cmds:
+      - go test -v ./...
+
+  run-server:
+    desc: "运行服务端 (例: task run-server PORT=5021 DATA=./data)"
+    vars:
+      PORT: "5021"
+      DATA: "./data"
+    cmds:
+      - mkdir -p {{.DATA}}
+      - test -f ./build/tink-server || ./scripts/build_server.sh
+      - ./build/tink-server serve --port {{.PORT}} --data {{.DATA}}
+
+  token-list:
+    desc: "查看所有 Token (自动支持在线/离线双模: task token-list DATA=./data)"
+    vars:
+      DATA: "./data"
+    cmds:
+      - ./build/tink-server token list --data {{.DATA}}
+
+  token-create:
+    desc: '创建新 Token (例: task token-create NAME="ci-key" DATA=./data)'
+    vars:
+      NAME: "CLI Generated"
+      DATA: "./data"
+    cmds:
+      - ./build/tink-server token create --name "{{.NAME}}" --data {{.DATA}}
+
+  device-list:
+    desc: "查看已注册客户端设备 (自动支持在线/离线双模: task device-list DATA=./data)"
+    vars:
+      DATA: "./data"
+    cmds:
+      - ./build/tink-server device list --data {{.DATA}}
+
+  run-client:
+    desc: "运行 macOS 客户端"
+    cmds:
+      - test -d ./build/universal/Tink.app || ./scripts/build_app.sh
+      - open build/universal/Tink.app
+
+  docker-up:
+    desc: "Docker Compose 后台启动服务"
+    cmds:
+      - docker compose up -d
+
+  docker-down:
+    desc: "Docker Compose 停止服务"
+    cmds:
+      - docker compose down
+
+  send:
+    desc: '发送通知 (例: task send TITLE="Deploy" BODY="Done" URL="https://example.com")'
+    vars:
+      SERVER: '{{.SERVER | default .TINK_SERVER | default "http://localhost:5021"}}'
+      TOKEN: '{{.TOKEN | default .TINK_TOKEN | default ""}}'
+      TITLE: '{{.TITLE | default "Tink Notification"}}'
+      BODY: '{{.BODY | default "Test message from Tink"}}'
+      URL: '{{.URL | default ""}}'
+      SOUND: '{{.SOUND | default "default"}}'
+      GROUP: '{{.GROUP | default ""}}'
+    cmds:
+      - ./scripts/send.sh --server "{{.SERVER}}" --token "{{.TOKEN}}" --title "{{.TITLE}}" --body "{{.BODY}}" --url "{{.URL}}" --sound "{{.SOUND}}" --group "{{.GROUP}}"
+
+  web-dev:
+    desc: "运行 Web 前端开发服务器 (热更新调试)"
+    dir: server/web
+    cmds:
+      - pnpm dev
+
+  clean:
+    desc: "清理构建产物与缓存"
+    cmds:
+      - rm -rf build/ client/.build/ server/internal/web/dist/

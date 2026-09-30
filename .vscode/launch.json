@@ -1,0 +1,64 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:tinker}/Tink",
+      "name": "Debug Tink (Tink)",
+      "target": "Tink",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug Tink (Tink)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:tinker}/Tink",
+      "name": "Release Tink (Tink)",
+      "target": "Tink",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release Tink (Tink)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:tink}/client",
+      "name": "Debug Tink (client)",
+      "target": "Tink",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug Tink (client)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:tink}/client",
+      "name": "Release Tink (client)",
+      "target": "Tink",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release Tink (client)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:tink}/newclient",
+      "name": "Debug Tink (newclient)",
+      "target": "Tink",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug Tink (newclient)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:tink}/newclient",
+      "name": "Release Tink (newclient)",
+      "target": "Tink",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release Tink (newclient)"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+vendor/
+
+# Go build artifacts
+bin/
+build/
+server/internal/web/dist
+
+# Node / Frontend
+node_modules/
+.pnpm-store/
+
+# Swift / Swift Package Manager / Xcode
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# Local data and runtime files
+data/*.db
+data/*.db-*
+*.log
+tmp/
+.env
+.env.*
+!.env.example
+
+# IDEs and editors
+.idea/
+.vscode/*.code-workspace
+server/server
