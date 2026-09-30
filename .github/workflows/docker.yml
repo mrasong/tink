@@ -115,7 +115,8 @@ jobs:
             # only tag pushes fire `push`, so latest follows formal releases
             type=raw,value=latest,enable=${{ github.event_name == 'push' }}
             type=ref,event=tag
-            type=sha,prefix=sha-,format=short
+            # sha tag only identifies trial builds from manual runs
+            type=sha,prefix=sha-,format=short,enable=${{ github.event_name != 'push' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6

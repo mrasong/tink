@@ -31,11 +31,32 @@ jobs:
           done
           ls -lh Tink-*.zip
 
+      - name: Package DMGs (drag-to-Applications installer)
+        run: |
+          brew install create-dmg
+          version="$(tr -d '[:space:]' < VERSION)"
+          for arch in arm64 x86_64; do
+            create-dmg \
+              --volname "Tink ${version} (${arch})" \
+              --window-pos 200 120 \
+              --window-size 660 400 \
+              --icon-size 96 \
+              --icon "Tink.app" 170 170 \
+              --hide-extension "Tink.app" \
+              --app-drop-link 490 170 \
+              --no-internet-enable \
+              "Tink-${version}-${arch}.dmg" \
+              "build/${arch}/"
+          done
+          ls -lh Tink-*.dmg
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v7
         with:
           name: Tink-macos-${{ github.event_name == 'push' && github.ref_name || 'dev' }}
-          path: Tink-*.zip
+          path: |
+            Tink-*.zip
+            Tink-*.dmg
 
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -47,6 +68,6 @@ jobs:
             gh release create "$tag" \
               --title "$tag" \
               --target "$GITHUB_SHA" \
-              --notes "macOS client builds (arm64 / x86_64 / universal). Ad-hoc signed; run \`xattr -dr com.apple.quarantine Tink.app\` on first launch."
+              --notes "macOS client builds. Install from the .dmg (drag Tink to Applications) or unzip. Ad-hoc signed; run \`xattr -dr com.apple.quarantine Tink.app\` on first launch."
           fi
-          gh release upload "$tag" Tink-*.zip --clobber
+          gh release upload "$tag" Tink-*.zip Tink-*.dmg --clobber
