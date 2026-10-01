@@ -176,7 +176,7 @@ curl -X POST http://localhost:5021/api/v1/messages \
   }'
 ```
 
-> 注：已禁用无目标广播机制，`devices`（Tink 客户端）与 `bark_devices`（Bark 客户端）至少需指定一个。`bark_params` 为可选的 JSON 键值对映射，用于向上游 Bark 推送时补充 Bark 原生个性化设置（如 `level`、`icon`、`badge`、`copy`、`autoCopy` 等）。
+> 注：已禁用无目标广播机制，`devices`（Tink 客户端）与 `bark_devices`（Bark 客户端）至少需指定一个。`bark_params` 为可选的 JSON 键值对映射，用于向上游 Bark 推送时补充 Bark 原生个性化设置（如 `level`、`icon`、`badge`、`copy`、`autoCopy` 等）。这些键只作用于 iOS 上的 Bark App——macOS 通知始终显示 Tink 自己的 App 图标，因为系统没有提供按消息自定义图标的 API（见 docs/apidoc.md 中的「通知图标（macOS）」）。
 > 在后台管理控制台开启 **Bark Relay** 并配置上游服务地址后，所有传给 `bark_devices` 的设备将自动向上游 Bark-Server 转发；同时，在 iOS Bark App 中将服务器地址填写为 `http://your-domain:5021/bark-relay` 即可实现完整的 Bark 原生透明代理（包含注册获取 `device_key` 与原生推送）。
 
 ### 2. 心跳与服务检查 (Ping)

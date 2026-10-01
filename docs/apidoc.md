@@ -95,6 +95,8 @@ Device object:
 
 Note: at least one of `devices` / `bark_devices` is required — broadcast-without-target is disabled. Every listed Tink device must exist and (for user keys) belong to the caller. Bark forwarding requires **Bark Relay** enabled in settings with a non-empty upstream URL; otherwise each Bark target appends an entry to `bark_errors` (push to Tink still succeeds).
 
+**Notification icon (macOS).** The macOS client cannot display a custom notification icon: the system always draws the app bundle icon, and no public API overrides it per message. Measured on 2026-10-01 — a `UNNotificationAttachment` built from a downloaded PNG is accepted by the API (`attachments.count == 1`, `add()` returns no error) yet renders nothing in the banner or Notification Center. `bark_params.icon` affects the iOS Bark app only (Apple's communication-notification avatar, which requires a Developer ID entitlement Tink does not ship), so putting an `icon` key in `payload` changes nothing on macOS today.
+
 Success returns `201`:
 
 ```json

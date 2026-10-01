@@ -82,14 +82,18 @@
     currentToken = null;
   }
 
+  function applyTheme(dark: boolean) {
+    document.documentElement.classList.toggle("dark", dark);
+    const favicon = document.getElementById("favicon") as HTMLLinkElement | null;
+    if (favicon) {
+      favicon.href = dark ? "./favicon.png" : "./favicon-light.png";
+    }
+  }
+
   function toggleTheme() {
     isDark = !isDark;
     localStorage.setItem("tink-theme", isDark ? "dark" : "light");
-    if (isDark) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
+    applyTheme(isDark);
   }
 
   function parseHash(): TabRoute {
@@ -139,7 +143,7 @@
   async function initialize() {
     const savedTheme = localStorage.getItem("tink-theme");
     isDark = savedTheme ? savedTheme === "dark" : true;
-    document.documentElement.classList.toggle("dark", isDark);
+    applyTheme(isDark);
 
     // 初始化 Hash 路由
     activeTab = parseHash();

@@ -173,7 +173,7 @@ curl -X POST http://localhost:5021/api/v1/messages \
   }'
 ```
 
-> Note: broadcast-without-target is disabled — at least one of `devices` (Tink clients) or `bark_devices` (Bark clients) is required. `bark_params` is an optional key/value map appended when forwarding to the upstream Bark server (`level`, `icon`, `badge`, `copy`, `autoCopy`, …).
+> Note: broadcast-without-target is disabled — at least one of `devices` (Tink clients) or `bark_devices` (Bark clients) is required. `bark_params` is an optional key/value map appended when forwarding to the upstream Bark server (`level`, `icon`, `badge`, `copy`, `autoCopy`, …). These keys reach the iOS Bark app only — macOS notifications always show the Tink app icon, because macOS offers no per-notification icon API (see *Notification icon (macOS)* in [docs/apidoc.md](docs/apidoc.md)).
 > Enable **Bark Relay** in the web console and configure the upstream URL, and every `bark_devices` entry is transparently forwarded to the upstream Bark server. Point the iOS Bark App at `http://your-domain:5021/bark-relay` to use Tink as a fully native Bark proxy (device registration and `device_key` issuing included).
 
 ### 2. Health check

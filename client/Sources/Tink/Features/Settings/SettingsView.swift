@@ -40,6 +40,19 @@ public struct SettingsView: View {
     @State private var isShowingResetConfirmation = false
     @ObservedObject private var connection = ConnectionManager.shared
 
+    // 服务端要求令牌以 sk-tink- 开头；URL 与令牌任一为空/非法都不允许保存
+    private var isSettingsValid: Bool {
+        !trimmedServerURL.isEmpty && trimmedApiToken.hasPrefix("sk-tink-")
+    }
+
+    private var trimmedServerURL: String {
+        serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+    }
+
+    private var trimmedApiToken: String {
+        apiToken.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     public init() {}
 
     public var body: some View {
@@ -134,7 +147,7 @@ public struct SettingsView: View {
         Section {
             TextField(
                 "Server Gateway URL", text: $serverURL,
-                prompt: Text(ClientConfiguration.defaultServerURL))
+                prompt: Text("https://tink.example.com"))
 
             HStack(spacing: 4) {
                 if isTokenVisible {
@@ -168,8 +181,8 @@ public struct SettingsView: View {
         } header: {
             Text("Server Connection")
         } footer: {
-            if !apiToken.isEmpty && !apiToken.hasPrefix("sk-tink-") {
-                Text("⚠️ Token format usually starts with sk-tink-")
+            if !trimmedApiToken.isEmpty && !trimmedApiToken.hasPrefix("sk-tink-") {
+                Text("⚠️ Token must start with sk-tink-")
                     .foregroundColor(.orange)
             } else {
                 Text("Authentication token registered with your Tink server")
@@ -225,11 +238,8 @@ public struct SettingsView: View {
                     Label {
                         Text("Tink Default")
                     } icon: {
-                        if let icon = AppIcons.menuBarTemplateImage() {
-                            Image(nsImage: icon)
-                        } else {
-                            Image(systemName: "app.dashed")
-                        }
+                        // 与其他候选项同一渲染路径（systemName），尺寸随文字统一
+                        Image(systemName: AppIcons.defaultMenuBarSymbol)
                     }
                     .labelStyle(.titleAndIcon)
                 }
@@ -297,6 +307,7 @@ public struct SettingsView: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
+                .disabled(!isSettingsValid)
             }
         } header: {
             Text("Actions")
@@ -334,19 +345,9 @@ public struct SettingsView: View {
     }
 
     private var currentMenuBarIconLabel: some View {
-        Group {
-            if menuBarSymbolName == ClientConfiguration.StorageKeys.menuBarDefaultIcon {
-                if let icon = AppIcons.menuBarTemplateImage() {
-                    Image(nsImage: icon)
-                        .frame(width: 16, height: 16)
-                } else {
-                    Image(systemName: "app.dashed")
-                }
-            } else {
-                Image(systemName: menuBarSymbolName)
-            }
-        }
-        .frame(width: 16, height: 16)
+        Image(systemName: menuBarSymbolName == ClientConfiguration.StorageKeys.menuBarDefaultIcon
+            ? AppIcons.defaultMenuBarSymbol : menuBarSymbolName)
+            .frame(width: 16, height: 16)
     }
 
     private func loadSettings() {
@@ -359,9 +360,11 @@ public struct SettingsView: View {
     }
 
     private func saveSettings() {
+        guard isSettingsValid else { return }
+
         let storage = LocalStorage.shared
-        storage.serverURL = serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
-        storage.apiToken = apiToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        storage.serverURL = trimmedServerURL
+        storage.apiToken = trimmedApiToken
         storage.deviceName = deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         isSavedAlert = true

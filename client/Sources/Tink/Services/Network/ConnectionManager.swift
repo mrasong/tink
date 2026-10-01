@@ -202,5 +202,11 @@ public final class ConnectionManager: ObservableObject, @preconcurrency SSEClien
     private func refreshCounts() {
         notificationCount = messageStore.count()
         storageError = messageStore.lastError?.localizedDescription
+        NotificationCenter.default.post(name: .tinkUnreadCountChanged, object: nil)
     }
+}
+
+extension Notification.Name {
+    /// 未读消息数可能发生变化（新消息到达 / 标记已读 / 删除），菜单栏红点监听此通知刷新。
+    static let tinkUnreadCountChanged = Notification.Name("TinkUnreadCountChanged")
 }

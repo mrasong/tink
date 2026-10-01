@@ -3,6 +3,7 @@
   import { api } from "@/api/index";
   import { t, toggleLocale } from "@/i18n";
   import logo from "@/assets/logo.png";
+  import logoLight from "@/assets/logo-light.png";
 
   type RouteTab = "overview" | "devices" | "keys" | "settings" | "push";
 
@@ -44,7 +45,8 @@
   <div class="nav-left">
     <div class="brand">
       <div class="logo">
-        <img src={logo} alt="Tink Logo" class="logo-img" />
+        <img src={logo} alt="Tink Logo" class="logo-img logo-dark" />
+        <img src={logoLight} alt="Tink Logo" class="logo-img logo-light" />
       </div>
       <span class="brand-name">Tink</span>
       <span class="badge">Console</span>
@@ -185,6 +187,19 @@
     width: 26px;
     height: 26px;
     object-fit: contain;
+  }
+
+  /* 默认（深色主题）显示 dark logo；浅色主题（无 html.dark）切换为 light */
+  .logo-light {
+    display: none;
+  }
+
+  :global(html:not(.dark)) .logo-light {
+    display: block;
+  }
+
+  :global(html:not(.dark)) .logo-dark {
+    display: none;
   }
 
   .brand-name {

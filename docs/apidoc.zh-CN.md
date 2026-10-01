@@ -95,6 +95,8 @@
 
 注：`devices` 与 `bark_devices` 至少指定其一——无目标广播已被禁用。所列 Tink 设备必须存在，且普通密钥只能投递给自己名下的设备。Bark 转发要求系统设置中开启 **Bark Relay** 且上游地址非空，否则每个 Bark 目标会向 `bark_errors` 追加一条错误（Tink 侧推送不受影响）。
 
+**通知图标（macOS）。** macOS 客户端无法显示自定义通知图标：系统始终绘制 App bundle 自己的图标，也没有任何公开 API 能按消息覆盖它。2026-10-01 实测：用下载的 PNG 构造 `UNNotificationAttachment`，API 层完全接受（`attachments.count == 1`、`add()` 无错误），但横幅与通知中心**都不渲染**这张图。`bark_params.icon` 只作用于 iOS 上的 Bark（走 Apple 通信通知头像，需要 Tink 未持有的 Developer ID entitlement），因此往 `payload` 里放 `icon` 字段目前在 macOS 上不会产生任何效果。
+
 成功返回 `201`：
 
 ```json

@@ -11,6 +11,8 @@ final class StatusBarMenuController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private let menu = NSMenu()
     private var defaultsObserver: NSObjectProtocol?
+    private var unreadObserver: NSObjectProtocol?
+    private var appearanceObserver: NSKeyValueObservation?
 
     private override init() {
         super.init()
@@ -19,31 +21,41 @@ final class StatusBarMenuController: NSObject, NSMenuDelegate {
     func install() {
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = Self.statusBarIcon()
         menu.delegate = self
         menu.autoenablesItems = true
         item.menu = menu
         statusItem = item
+        updateIcon()
 
+        // 菜单栏深浅色随系统外观变化，彩色红点版图标需按新外观重绘
+        appearanceObserver = item.button?.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.updateIcon() }
+        }
+        unreadObserver = NotificationCenter.default.addObserver(
+            forName: .tinkUnreadCountChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateIcon() }
+        }
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.statusItem?.button?.image = Self.statusBarIcon()
+                self?.updateIcon()
             }
         }
     }
 
-    private static func statusBarIcon() -> NSImage? {
-        let symbolName = UserDefaults.standard.string(
+    private func updateIcon() {
+        let stored = UserDefaults.standard.string(
             forKey: ClientConfiguration.StorageKeys.menuBarSymbolName
         ) ?? ClientConfiguration.StorageKeys.menuBarDefaultIcon
-        if symbolName == ClientConfiguration.StorageKeys.menuBarDefaultIcon {
-            return AppIcons.menuBarTemplateImage()
-        }
-        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Tink")
-        image?.size = NSSize(width: 18, height: 18)
-        return image
+        let symbolName = stored == ClientConfiguration.StorageKeys.menuBarDefaultIcon
+            ? AppIcons.defaultMenuBarSymbol : stored
+        statusItem?.button?.image = AppIcons.menuBarImage(
+            symbolName: symbolName,
+            unread: ConnectionManager.shared.unreadCount > 0,
+            appearance: statusItem?.button?.effectiveAppearance ?? NSAppearance.currentDrawing()
+        )
     }
 
     // MARK: - NSMenuDelegate
