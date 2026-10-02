@@ -132,3 +132,5 @@ jobs:
             BUILD_ID=${{ steps.args.outputs.build_id }}
           cache-from: type=registry,ref=${{ env.CACHE }}:latest
           cache-to: type=registry,ref=${{ env.CACHE }}:latest,mode=max,image-manifest=true,oci-mediatypes=true
+          # attestations surface as an "unknown/unknown" platform on the GHCR page
+          provenance: false
